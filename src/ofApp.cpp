@@ -3,7 +3,10 @@
 
 
 //--------------------------------------------------------------
-array<size_t, 2> get_hill_position(size_t index, size_t quad_size, size_t grid_size, float draw_scalar)
+array<size_t, 2> get_hill_position(size_t index,
+                                   size_t quad_size,
+                                   size_t grid_size,
+                                   float draw_scalar)
 {
     const auto step = grid_size / quad_size;
     const size_t remainder = index % step;
@@ -13,7 +16,9 @@ array<size_t, 2> get_hill_position(size_t index, size_t quad_size, size_t grid_s
 }
 
 //--------------------------------------------------------------
-size_t get_hill_index(agent& agent, size_t quad_size, size_t grid_size)
+size_t get_hill_index(agent& agent,
+                      size_t quad_size,
+                      size_t grid_size)
 {
     const size_t quadrant_start_x = (agent.x - (agent.x % quad_size)) / quad_size;
     const size_t quadrant_start_y = (agent.y - (agent.y % quad_size)) / quad_size;
@@ -39,7 +44,8 @@ void grid_world_middle_bias(std::vector<std::vector<int>>& world,
 }
 
 //--------------------------------------------------------------
-bool agent_is_in_same_position(std::shared_ptr<agent>& prospective_agent, std::vector<std::shared_ptr<agent>>& agents)
+bool agent_is_in_same_position(std::shared_ptr<agent>& prospective_agent,
+                               std::vector<std::shared_ptr<agent>>& agents)
 {
     for (auto& agent : agents)
         if (agent->x == prospective_agent->x && agent->y == prospective_agent->y)
@@ -48,7 +54,11 @@ bool agent_is_in_same_position(std::shared_ptr<agent>& prospective_agent, std::v
 }
 
 //--------------------------------------------------------------
-void set_agent_randomly_in_same_quadrant(const std::shared_ptr<agent>& happy, std::shared_ptr<agent>& unhappy, std::vector<std::shared_ptr<agent>>& agents, size_t quad_size, std::size_t grid_size, random_uniform& uniform_random)
+void set_agent_randomly_in_same_quadrant(const std::shared_ptr<agent>& happy,
+                                         std::shared_ptr<agent>& unhappy,
+                                         std::vector<std::shared_ptr<agent>>& agents,
+                                         size_t quad_size, std::size_t grid_size,
+                                         random_uniform& uniform_random)
 {
     const size_t quadrant_start_x = happy->x - (happy->x % quad_size);
     const size_t quadrant_start_y = happy->y - (happy->y % quad_size);
@@ -204,7 +214,9 @@ void ofApp::keyPressed(int key)
 }
 
 //--------------------------------------------------------------
-void ofApp::mousePressed(int x, int y, int button)
+void ofApp::mousePressed(int x,
+                         int y,
+                         int button)
 {
     bool old_run = run;
     setup();
