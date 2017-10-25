@@ -3,6 +3,7 @@
 #include "ofMain.h"
 #include <random>
 
+//--------------------------------------------------------------
 class agent
 {
 public:
@@ -16,27 +17,29 @@ public:
     }
 };
 
+//--------------------------------------------------------------
 class random_uniform
 {
 private:
     std::random_device random_device;
     std::mt19937 random_number_generator;
-    std::uniform_int_distribution<size_t> uniform_distribution;
+    std::uniform_real_distribution<double> uniform_distribution;
     
 public:
-    random_uniform(size_t min, size_t max) :
+    random_uniform() :
         random_device{},
         random_number_generator{random_device()},
-        uniform_distribution{min, max}
+        uniform_distribution{0.0, 1.0}
     {}
     
-    size_t get_next()
+    size_t get_next(size_t max)
     {
-        const size_t result = uniform_distribution(random_number_generator);
-        return result;
+        const double result = uniform_distribution(random_number_generator);
+        return size_t(std::round(result * max));
     }
 };
 
+//--------------------------------------------------------------
 class ofApp : public ofBaseApp{
 
 public:
@@ -47,10 +50,10 @@ public:
     void mousePressed(int x, int y, int button);
     
 private:
-    std::unique_ptr<random_uniform> uniform_random;
+    random_uniform uniform_random;
     
-    std::size_t grid_size;
-    std::size_t partial_size;
+    size_t grid_size;
+    size_t partial_size;
     std::vector<std::vector<int>> partial_grid;
     std::map<size_t, size_t> most_frequent_hill_indices;
     std::array<size_t, 2> best_hill_coordinates;
@@ -63,5 +66,6 @@ private:
     std::vector<std::shared_ptr<agent>> agents;
     
     bool run;
+    unsigned long long iteration;
 		
 };
