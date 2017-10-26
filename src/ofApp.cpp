@@ -3,10 +3,10 @@
 
 
 //--------------------------------------------------------------
-array<size_t, 2> get_hill_position(size_t index,
-                                   size_t quad_size,
-                                   size_t grid_size,
-                                   float draw_scalar)
+std::array<size_t, 2> get_hill_position(size_t index,
+                                        size_t quad_size,
+                                        size_t grid_size,
+                                        float draw_scalar)
 {
     const auto step = grid_size / quad_size;
     const size_t remainder = index % step;
@@ -26,21 +26,50 @@ size_t get_hill_index(agent& agent,
 }
 
 //--------------------------------------------------------------
-void grid_world_middle_bias(std::vector<std::vector<int>>& world,
+void grid_world_middle_bias(std::vector<std::vector<std::pair<int, bool>>>& world,
                             random_uniform& uniform_random)
 {
     for (size_t x = 0; x < world.size(); ++x)
     {
         for (size_t y = 0; y < world[x].size(); ++y)
         {
-            const float centre_x = float(world.size()) / 2.0;
-            const float centre_y = float(world.size()) / 2.0;
+            const float centre_x = float(world.size()) / 2.0f;
+            const float centre_y = float(world.size()) / 2.0f;
             const size_t prob_x = abs(centre_x - x);
             const size_t prob_y = abs(centre_y - y);
-            const size_t prob = size_t(float(prob_x + prob_y) / 2.0);
-            world[x][y] = uniform_random.get_next(prob + 1) == 1;
+            const size_t prob = size_t(float(prob_x + prob_y) / 3.0f);
+            world[x][y].first = uniform_random.get_next(prob * prob + 1) == 1;
+            world[x][y].second = false;
         }
     }
+}
+
+//--------------------------------------------------------------
+void grid_world_moving_noise(std::vector<std::vector<std::pair<int, bool>>>& world,
+                             unsigned long long iteration)
+{
+    const float scale = 0.01f;
+    const float speed = 0.005f;
+    for (float x = 0; x < float(world.size()); ++x)
+    {
+        for (float y = 0; y < float(world.size()); ++y)
+        {
+            world[x][y].first = ofNoise(x * scale, y * scale, float(iteration) * speed) > 0.9;
+            world[x][y].second = false;
+        }
+    }
+}
+
+//--------------------------------------------------------------
+void clear_grid_world(std::vector<std::vector<std::pair<int, bool>>>& world,
+                      std::vector<std::shared_ptr<agent>>& agents)
+{
+    for (size_t x = 0; x < world.size(); ++x)
+        for (size_t y = 0; y < world.size(); ++y)
+            world[x][y].second = false;
+    
+    for (auto& agent : agents)
+        world[agent->x][agent->y].second = true;
 }
 
 //--------------------------------------------------------------
@@ -57,22 +86,44 @@ bool agent_is_in_same_position(std::shared_ptr<agent>& prospective_agent,
 void set_agent_randomly_in_same_quadrant(const std::shared_ptr<agent>& happy,
                                          std::shared_ptr<agent>& unhappy,
                                          std::vector<std::shared_ptr<agent>>& agents,
-                                         size_t quad_size, std::size_t grid_size,
+                                         std::vector<std::vector<std::pair<int, bool>>>& world,
+                                         size_t quad_size,
+                                         std::size_t grid_size,
                                          random_uniform& uniform_random)
 {
     const size_t quadrant_start_x = happy->x - (happy->x % quad_size);
     const size_t quadrant_start_y = happy->y - (happy->y % quad_size);
     const size_t random_x = uniform_random.get_next(quad_size);
     const size_t random_y = uniform_random.get_next(quad_size);
-    unhappy->x = std::min(random_x + quadrant_start_x, grid_size - 1);
-    unhappy->y = std::min(random_y + quadrant_start_y, grid_size - 1);
+    const size_t x = std::min(random_x + quadrant_start_x, grid_size - 1);
+    const size_t y = std::min(random_y + quadrant_start_y, grid_size - 1);
+    const bool already_being_mined = world[x][y].second;
+    
+    world[unhappy->x][unhappy->y].second = false;
+    if (already_being_mined)
+    {
+        unhappy->x = uniform_random.get_next(grid_size - 1);
+        unhappy->y = uniform_random.get_next(grid_size - 1);
+    }
+    else
+    {
+        unhappy->x = x;
+        unhappy->y = y;
+    }
+    world[unhappy->x][unhappy->y].second = true;
 }
 
 
 //--------------------------------------------------------------
 void ofApp::setup()
 {
+    save_output = true;
+    max_iteration = 150;
+    
     run = false;
+    noise = false;
+    moving = false;
+    iteration = 0;
     grid_size = 200;
     partial_size = 20;
     
@@ -82,7 +133,7 @@ void ofApp::setup()
     partial_grid.clear();
     partial_grid.resize(grid_size);
     for (auto& col : partial_grid)
-        col.resize(grid_size, 0);
+        col.resize(grid_size, std::make_pair(0, false));
     
     agent_size = 100;
     
@@ -94,28 +145,46 @@ void ofApp::setup()
         a->x = uniform_random.get_next(grid_size - 1);
         a->y = uniform_random.get_next(grid_size - 1);
         a->happy = false;
+        partial_grid[a->x][a->y].second = true;
         agents.push_back(a);
     }
     
+    happy_agents.clear();
     happy_agents.reserve(agents.size());
+    unhappy_agents.clear();
     unhappy_agents.reserve(agents.size());
     
-    for (auto& col : partial_grid)
-        for (auto& element : col)
-            element = uniform_random.get_next(100) == 0;
-    
-    grid_world_middle_bias(partial_grid, uniform_random);
+    if (noise)
+        grid_world_moving_noise(partial_grid, iteration);
+    else
+        grid_world_middle_bias(partial_grid, uniform_random);
     
     draw_scalar = float(ofGetWidth()) / float(grid_size);
     
     ofBackground(80);
+    
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "Run-%d-%m-%Y-%H-%M-%S");
+    save_name = oss.str();
 }
 
 //--------------------------------------------------------------
 void ofApp::update()
 {
-    if (run)
+    if (ofGetMousePressed())
     {
+        setup();
+        ofSetWindowTitle(std::string("Setting up!"));
+    }
+    else if (run)
+    {
+        if (noise && moving)
+            grid_world_moving_noise(partial_grid, iteration);
+        else
+            clear_grid_world(partial_grid, agents);
+        
         happy_agents.clear();
         unhappy_agents.clear();
         
@@ -151,6 +220,7 @@ void ofApp::update()
                     set_agent_randomly_in_same_quadrant(agents[random_index],
                                                         agent,
                                                         agents,
+                                                        partial_grid,
                                                         partial_size,
                                                         grid_size,
                                                         uniform_random);
@@ -159,12 +229,21 @@ void ofApp::update()
                 {
                     agent->x = uniform_random.get_next(grid_size - 1);
                     agent->y = uniform_random.get_next(grid_size - 1);
+                    
                 }
+            }
+            else
+            {
+                agent->x = uniform_random.get_next(grid_size - 1);
+                agent->y = uniform_random.get_next(grid_size - 1);
             }
         }
         
-        ofSetWindowTitle(std::string("Iteration: ") + std::to_string(iteration));
-        ++iteration;
+        ofSetWindowTitle(save_name + std::string(": ") + std::to_string(iteration));
+    }
+    else
+    {
+        ofSetWindowTitle(std::string("NOT RUNNING"));
     }
 }
 
@@ -176,7 +255,7 @@ void ofApp::draw()
     {
         for (size_t y = 0; y < grid_size; ++y)
         {
-            const ofColor c = (partial_grid[x][y] == 0) ? ofColor::black : ofColor::gold;
+            const ofColor c = (partial_grid[x][y].first == 0) ? ofColor::black : ofColor::gold;
             ofSetColor(c);
             ofDrawRectangle(x * draw_scalar, y * draw_scalar, draw_scalar, draw_scalar);
         }
@@ -195,15 +274,28 @@ void ofApp::draw()
     // Best partial
     ofSetColor(255, 127);
     ofDrawRectangle(best_hill_coordinates[0], best_hill_coordinates[1], partial_size * draw_scalar, partial_size * draw_scalar);
-    
+    ofSetColor(ofColor::red);
+    ofDrawLine(best_hill_coordinates[0], best_hill_coordinates[1], best_hill_coordinates[0] + partial_size * draw_scalar, best_hill_coordinates[1]);
+    ofDrawLine(best_hill_coordinates[0], best_hill_coordinates[1], best_hill_coordinates[0], best_hill_coordinates[1] + partial_size * draw_scalar);
+    ofDrawLine(best_hill_coordinates[0], best_hill_coordinates[1] + partial_size * draw_scalar, best_hill_coordinates[0] + partial_size * draw_scalar, best_hill_coordinates[1] + partial_size * draw_scalar);
+    ofDrawLine(best_hill_coordinates[0] + partial_size * draw_scalar, best_hill_coordinates[1] + partial_size * draw_scalar, best_hill_coordinates[0] + partial_size * draw_scalar, best_hill_coordinates[1]);
     
     // Agents
-    ofSetColor(ofColor::red);
     const float increment = float(partial_size) / 2.0;
     const float inc = draw_scalar / 2.0;
     for (auto& agent : agents)
     {
         ofDrawCircle(agent->x * draw_scalar + inc, agent->y * draw_scalar + inc, draw_scalar / 3.0);
+    }
+    
+    if (run)
+    {
+        ++iteration;
+        if (save_output)
+            ofSaveScreen(save_name + std::to_string(iteration) + ".png");
+        
+        if (save_output && iteration > max_iteration)
+            ofExit();
     }
 }
 
@@ -211,15 +303,4 @@ void ofApp::draw()
 void ofApp::keyPressed(int key)
 {
     run = !run;
-}
-
-//--------------------------------------------------------------
-void ofApp::mousePressed(int x,
-                         int y,
-                         int button)
-{
-    bool old_run = run;
-    setup();
-    iteration = 0;
-    run = old_run;
 }

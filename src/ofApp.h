@@ -10,9 +10,9 @@ public:
     size_t x, y;
     bool happy;
    
-    bool set_happy(const std::vector<std::vector<int>>& world)
+    bool set_happy(const std::vector<std::vector<std::pair<int, bool>>>& world)
     {
-        happy = world[x][y] == 1;
+        happy = world[x][y].first == 1;
         return happy;
     }
 };
@@ -47,14 +47,13 @@ public:
 	void update();
 	void draw();
 	void keyPressed(int key);
-    void mousePressed(int x, int y, int button);
     
 private:
     random_uniform uniform_random;
     
     size_t grid_size;
     size_t partial_size;
-    std::vector<std::vector<int>> partial_grid;
+    std::vector<std::vector<std::pair<int, bool>>> partial_grid;
     std::map<size_t, size_t> most_frequent_hill_indices;
     std::array<size_t, 2> best_hill_coordinates;
     
@@ -66,6 +65,10 @@ private:
     std::vector<std::shared_ptr<agent>> agents;
     
     bool run;
+    bool noise;
+    bool moving;
+    bool save_output;
     unsigned long long iteration;
-		
+    unsigned long long max_iteration;
+    std::string save_name;
 };
